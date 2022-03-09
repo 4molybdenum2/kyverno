@@ -35,6 +35,8 @@ func (pc PromConfig) registerPolicyChangesMetric(
 		"policy_name":            policyName,
 		"policy_change_type":     string(policyChangeType),
 	}).Inc()
+
+	metrics.RecordPolicyChanges(policyValidationMode, policyType, policyBackgroundMode, policyNamespace, policyName, string(policyChangeType), pc.Log)
 	return nil
 }
 

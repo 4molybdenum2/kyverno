@@ -299,6 +299,15 @@ func main() {
 		}()
 	}
 
+	//OTEL CONFIG
+	// This sets up a new opentelemetry config
+	setupLog.Info("enabling otel metrics", "address", ":4317")
+	err = metrics.NewOTLPConfig("opentelemetrycollector.kyverno.svc.cluster.local:4317", log.Log.WithName("OtelMetrics"))
+	if err != nil {
+		setupLog.Error(err, "failed to enable otel metrics")
+		os.Exit(1)
+	}
+
 	// POLICY CONTROLLER
 	// - reconciliation policy and policy violation
 	// - process policy on existing resources

@@ -20,6 +20,8 @@ spec:
         app: kyverno
         # do not remove
         app.kubernetes.io/name: kyverno
+      annotations:
+        sidecar.opentelemetry.io/inject: "true"
     spec:
       affinity:
         podAntiAffinity:

@@ -47,6 +47,10 @@ func (pc PromConfig) registerPolicyResultsMetric(
 		"rule_type":                  string(ruleType),
 		"rule_execution_cause":       string(ruleExecutionCause),
 	}).Inc()
+
+	// include otel instrumentation here
+	metrics.RecordPolicyResults(policyValidationMode, policyType, policyBackgroundMode, policyNamespace, policyName, resourceKind, resourceNamespace, resourceRequestOperation, ruleName, ruleResult, ruleType, ruleExecutionCause, pc.Log)
+
 	return nil
 }
 

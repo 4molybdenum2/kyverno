@@ -57,6 +57,7 @@ func (pc PromConfig) registerPolicyRuleInfoMetric(
 		"status_ready":           status,
 	}).Set(metricValue)
 
+	metrics.RecordPolicyRuleInfo(policyValidationMode, policyType, policyBackgroundMode, policyNamespace, policyName, ruleName, ruleType, status, metricValue, pc.Log)
 	return nil
 }
 
