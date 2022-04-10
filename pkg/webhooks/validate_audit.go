@@ -62,6 +62,7 @@ type auditHandler struct {
 	log           logr.Logger
 	configHandler config.Interface
 	promConfig    *metrics.PromConfig
+	metricsConfig *metrics.MetricsConfig
 }
 
 // NewValidateAuditHandler returns a new instance of audit policy handler
@@ -74,7 +75,8 @@ func NewValidateAuditHandler(pCache policycache.Interface,
 	log logr.Logger,
 	dynamicConfig config.Interface,
 	client *client.Client,
-	promConfig *metrics.PromConfig) AuditHandler {
+	promConfig *metrics.PromConfig,
+	metricsConfig *metrics.MetricsConfig) AuditHandler {
 
 	return &auditHandler{
 		pCache:         pCache,
@@ -91,6 +93,7 @@ func NewValidateAuditHandler(pCache policycache.Interface,
 		configHandler:  dynamicConfig,
 		client:         client,
 		promConfig:     promConfig,
+		metricsConfig:  metricsConfig,
 	}
 }
 
@@ -201,7 +204,7 @@ func (h *auditHandler) process(request *admissionv1.AdmissionRequest) error {
 		prGenerator: h.prGenerator,
 	}
 
-	vh.handleValidation(h.promConfig, request, policies, policyContext, namespaceLabels, admissionRequestTimestamp)
+	vh.handleValidation(h.promConfig, h.metricsConfig, request, policies, policyContext, namespaceLabels, admissionRequestTimestamp)
 	return nil
 }
 

@@ -62,6 +62,8 @@ var (
 	genWorkers                   int
 	profile                      bool
 	disableMetricsExport         bool
+	otel                         string
+	otelCollector                string
 	autoUpdateWebhooks           bool
 	policyControllerResyncPeriod time.Duration
 	imagePullSecrets             string
@@ -92,6 +94,8 @@ func main() {
 	// deprecated
 	flag.BoolVar(&disableMetricsExport, "disable-metrics", false, "Set this flag to 'true', to enable exposing the metrics. Deprecated and will be removed in 1.6.0. ")
 	flag.BoolVar(&disableMetricsExport, "disableMetrics", false, "Set this flag to 'true', to enable exposing the metrics.")
+	flag.StringVar(&otel, "otel-config", "grpc", "Set this flag to 'prometheus', to enable exposing metrics directly to prometheus. Or else set to grpc to export metrics to an Opentelemetry collector")
+	flag.StringVar(&otelCollector, "otel-collector", "opentelemetrycollector.kyverno.svc.cluster.local:4317", "Set this flag to the OpenTelemetry Collector Receiver endpoint")
 	// deprecated
 	flag.StringVar(&metricsPort, "metrics-port", "8000", "Expose prometheus metrics at the given port, default to 8000. Deprecated and will be removed in 1.6.0. ")
 	flag.StringVar(&metricsPort, "metricsPort", "8000", "Expose prometheus metrics at the given port, default to 8000.")
@@ -124,6 +128,7 @@ func main() {
 
 	var metricsServerMux *http.ServeMux
 	var promConfig *metrics.PromConfig
+	var metricsConfig *metrics.MetricsConfig
 
 	if profile {
 		addr := ":" + profilePort
@@ -302,11 +307,26 @@ func main() {
 	}
 
 	// OpenTelemetry Configuration
-	setupLog.Info("enabling otel metrics", "address", ":4317")
-	err = metrics.NewOTLPConfig("opentelemetrycollector.kyverno.svc.cluster.local:4317", log.Log.WithName("OtelMetrics"))
-	if err != nil {
-		setupLog.Error(err, "failed to enable otel metrics")
-		os.Exit(1)
+	if !disableMetricsExport {
+		if otel == "grpc" {
+			setupLog.Info("enabling otel grpc metrics", "address", ":4317")
+			// TODO: Get collector endpoint from the user using a cmd flag
+			metricsConfig, err = metrics.NewOTLPGRPCConfig(otelCollector, metricsConfigData, log.Log.WithName("OtelMetrics"))
+			if err != nil {
+				setupLog.Error(err, "failed to enable otel metrics")
+				os.Exit(1)
+			}
+		} else if otel == "prometheus" {
+			// NewPrometheusConfig
+			metricsAddr := ":" + metricsPort
+			setupLog.Info("enabling prometheus metrics", "address", metricsAddr)
+			// TODO: Get collector endpoint from the user using a cmd flag
+			metricsConfig, err = metrics.NewPrometheusConfig(metricsAddr, metricsConfigData, log.Log.WithName("Prometheus-Config"))
+			if err != nil {
+				setupLog.Error(err, "failed to enable prometheus metrics")
+				os.Exit(1)
+			}
+		}
 	}
 
 	// POLICY CONTROLLER
@@ -328,6 +348,7 @@ func main() {
 		log.Log.WithName("PolicyController"),
 		policyControllerResyncPeriod,
 		promConfig,
+		metricsConfig,
 	)
 
 	if err != nil {
@@ -391,6 +412,7 @@ func main() {
 		configData,
 		client,
 		promConfig,
+		metricsConfig,
 	)
 
 	certRenewer := ktls.NewCertRenewer(client, clientConfig, ktls.CertRenewalInterval, ktls.CertValidityDuration, serverIP, log.Log.WithName("CertRenewer"))
@@ -487,6 +509,7 @@ func main() {
 		openAPIController,
 		grc,
 		promConfig,
+		metricsConfig,
 	)
 
 	if err != nil {

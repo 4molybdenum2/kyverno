@@ -118,6 +118,8 @@ type WebhookServer struct {
 
 	promConfig *metrics.PromConfig
 
+	metricsConfig *metrics.MetricsConfig
+
 	mu sync.RWMutex
 }
 
@@ -147,6 +149,7 @@ func NewWebhookServer(
 	openAPIController *openapi.Controller,
 	grc *background.Controller,
 	promConfig *metrics.PromConfig,
+	metricsConfig *metrics.MetricsConfig,
 ) (*WebhookServer, error) {
 	if tlsPair == nil {
 		return nil, errors.New("NewWebhookServer is not initialized properly")
@@ -185,6 +188,7 @@ func NewWebhookServer(
 		log:               log,
 		openAPIController: openAPIController,
 		promConfig:        promConfig,
+		metricsConfig:     metricsConfig,
 	}
 	mux := httprouter.New()
 	mux.HandlerFunc("POST", config.MutatingWebhookServicePath, ws.admissionHandler(true, ws.resourceMutation))
