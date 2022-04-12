@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
@@ -94,8 +93,8 @@ func main() {
 	// deprecated
 	flag.BoolVar(&disableMetricsExport, "disable-metrics", false, "Set this flag to 'true', to enable exposing the metrics. Deprecated and will be removed in 1.6.0. ")
 	flag.BoolVar(&disableMetricsExport, "disableMetrics", false, "Set this flag to 'true', to enable exposing the metrics.")
-	flag.StringVar(&otel, "otel-config", "grpc", "Set this flag to 'prometheus', to enable exposing metrics directly to prometheus. Or else set to grpc to export metrics to an Opentelemetry collector")
-	flag.StringVar(&otelCollector, "otel-collector", "opentelemetrycollector.kyverno.svc.cluster.local:4317", "Set this flag to the OpenTelemetry Collector Receiver endpoint")
+	flag.StringVar(&otel, "otelConfig", "grpc", "Set this flag to 'prometheus', to enable exposing metrics directly to prometheus. Or else set to grpc to export metrics to an Opentelemetry collector")
+	flag.StringVar(&otelCollector, "otelCollector", "opentelemetrycollector.kyverno.svc.cluster.local:4317", "Set this flag to the OpenTelemetry Collector Receiver endpoint")
 	// deprecated
 	flag.StringVar(&metricsPort, "metrics-port", "8000", "Expose prometheus metrics at the given port, default to 8000. Deprecated and will be removed in 1.6.0. ")
 	flag.StringVar(&metricsPort, "metricsPort", "8000", "Expose prometheus metrics at the given port, default to 8000.")
@@ -127,7 +126,6 @@ func main() {
 	}
 
 	var metricsServerMux *http.ServeMux
-	var promConfig *metrics.PromConfig
 	var metricsConfig *metrics.MetricsConfig
 
 	if profile {
@@ -288,44 +286,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !disableMetricsExport {
-		promConfig, err = metrics.NewPromConfig(metricsConfigData, log.Log.WithName("MetricsConfig"))
-		if err != nil {
-			setupLog.Error(err, "failed to setup Prometheus metric configuration")
-			os.Exit(1)
-		}
-		metricsServerMux = http.NewServeMux()
-		metricsServerMux.Handle("/metrics", promhttp.HandlerFor(promConfig.MetricsRegistry, promhttp.HandlerOpts{Timeout: 10 * time.Second}))
-		metricsAddr := ":" + metricsPort
-		go func() {
-			setupLog.Info("enabling metrics service", "address", metricsAddr)
-			if err := http.ListenAndServe(metricsAddr, metricsServerMux); err != nil {
-				setupLog.Error(err, "failed to enable metrics service", "address", metricsAddr)
-				os.Exit(1)
-			}
-		}()
-	}
-
-	// OpenTelemetry Configuration
+	// Metrics Configuration
 	if !disableMetricsExport {
 		if otel == "grpc" {
+			// Otlpgrpc metrics will be served on port 4317: default port for otlpgrpcmetrics
 			setupLog.Info("enabling otel grpc metrics", "address", ":4317")
-			// TODO: Get collector endpoint from the user using a cmd flag
-			metricsConfig, err = metrics.NewOTLPGRPCConfig(otelCollector, metricsConfigData, log.Log.WithName("OtelMetrics"))
+			metricsConfig, err = metrics.NewOTLPGRPCConfig(otelCollector, metricsConfigData, log.Log.WithName("Opentelemetry-Metrics"))
 			if err != nil {
 				setupLog.Error(err, "failed to enable otel metrics")
 				os.Exit(1)
 			}
 		} else if otel == "prometheus" {
-			// NewPrometheusConfig
+			// Prometheus Server will serve metrics on metrics-port
 			metricsAddr := ":" + metricsPort
 			setupLog.Info("enabling prometheus metrics", "address", metricsAddr)
-			// TODO: Get collector endpoint from the user using a cmd flag
-			metricsConfig, err = metrics.NewPrometheusConfig(metricsAddr, metricsConfigData, log.Log.WithName("Prometheus-Config"))
-			if err != nil {
-				setupLog.Error(err, "failed to enable prometheus metrics")
-				os.Exit(1)
-			}
+			metricsConfig, metricsServerMux, err = metrics.NewPrometheusConfig(metricsConfigData, log.Log.WithName("Prometheus-Metrics"))
+			go func() {
+				setupLog.Info("enabling metrics service", "address", metricsAddr)
+				if err := http.ListenAndServe(metricsAddr, metricsServerMux); err != nil {
+					setupLog.Error(err, "failed to enable metrics service", "address", metricsAddr)
+					os.Exit(1)
+				}
+			}()
 		}
 	}
 
@@ -347,7 +329,7 @@ func main() {
 		kubeInformer.Core().V1().Namespaces(),
 		log.Log.WithName("PolicyController"),
 		policyControllerResyncPeriod,
-		promConfig,
+		// promConfig,
 		metricsConfig,
 	)
 
@@ -411,7 +393,7 @@ func main() {
 		log.Log.WithName("ValidateAuditHandler"),
 		configData,
 		client,
-		promConfig,
+		// promConfig,
 		metricsConfig,
 	)
 
@@ -508,7 +490,7 @@ func main() {
 		log.Log.WithName("WebhookServer"),
 		openAPIController,
 		grc,
-		promConfig,
+		// promConfig,
 		metricsConfig,
 	)
 

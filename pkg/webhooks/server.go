@@ -116,8 +116,6 @@ type WebhookServer struct {
 
 	grController *background.Controller
 
-	promConfig *metrics.PromConfig
-
 	metricsConfig *metrics.MetricsConfig
 
 	mu sync.RWMutex
@@ -148,7 +146,6 @@ func NewWebhookServer(
 	log logr.Logger,
 	openAPIController *openapi.Controller,
 	grc *background.Controller,
-	promConfig *metrics.PromConfig,
 	metricsConfig *metrics.MetricsConfig,
 ) (*WebhookServer, error) {
 	if tlsPair == nil {
@@ -187,7 +184,6 @@ func NewWebhookServer(
 		auditHandler:      auditHandler,
 		log:               log,
 		openAPIController: openAPIController,
-		promConfig:        promConfig,
 		metricsConfig:     metricsConfig,
 	}
 	mux := httprouter.New()

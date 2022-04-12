@@ -9,6 +9,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// deprecated
 type PromConfig struct {
 	MetricsRegistry *prom.Registry
 	Metrics         *PromMetrics

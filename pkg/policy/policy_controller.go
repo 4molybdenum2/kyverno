@@ -102,8 +102,6 @@ type PolicyController struct {
 	log logr.Logger
 
 	metricsConfig *metrics.MetricsConfig
-
-	promConfig *metrics.PromConfig
 }
 
 // NewPolicyController create a new PolicyController
@@ -121,7 +119,6 @@ func NewPolicyController(
 	namespaces informers.NamespaceInformer,
 	log logr.Logger,
 	reconcilePeriod time.Duration,
-	promConfig *metrics.PromConfig,
 	metricsConfig *metrics.MetricsConfig,
 ) (*PolicyController, error) {
 
@@ -146,7 +143,6 @@ func NewPolicyController(
 		prGenerator:        prGenerator,
 		policyReportEraser: policyReportEraser,
 		reconcilePeriod:    reconcilePeriod,
-		promConfig:         promConfig,
 		metricsConfig:      metricsConfig,
 		log:                log,
 	}
