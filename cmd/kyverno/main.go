@@ -329,7 +329,6 @@ func main() {
 		kubeInformer.Core().V1().Namespaces(),
 		log.Log.WithName("PolicyController"),
 		policyControllerResyncPeriod,
-		// promConfig,
 		metricsConfig,
 	)
 
@@ -393,7 +392,6 @@ func main() {
 		log.Log.WithName("ValidateAuditHandler"),
 		configData,
 		client,
-		// promConfig,
 		metricsConfig,
 	)
 
@@ -490,7 +488,6 @@ func main() {
 		log.Log.WithName("WebhookServer"),
 		openAPIController,
 		grc,
-		// promConfig,
 		metricsConfig,
 	)
 
