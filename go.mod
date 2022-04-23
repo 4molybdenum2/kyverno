@@ -60,7 +60,7 @@ require (
 )
 
 require (
-	go.opentelemetry.io/otel v1.6.1
+	go.opentelemetry.io/otel v1.6.3
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.28.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.28.0
@@ -247,10 +247,12 @@ require (
 	github.com/xlab/treeprint v0.0.0-20181112141820-a009c3971eca // indirect
 	go.mongodb.org/mongo-driver v1.8.3 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.6.1 // indirect
-	go.opentelemetry.io/otel/sdk v1.6.1 // indirect
-	go.opentelemetry.io/otel/trace v1.6.1 // indirect
-	go.opentelemetry.io/proto/otlp v0.12.1 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.6.3 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.6.3 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.6.3 // indirect
+	go.opentelemetry.io/otel/sdk v1.6.3 // indirect
+	go.opentelemetry.io/otel/trace v1.6.3 // indirect
+	go.opentelemetry.io/proto/otlp v0.15.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
