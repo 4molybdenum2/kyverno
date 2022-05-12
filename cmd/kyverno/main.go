@@ -62,6 +62,7 @@ var (
 	genWorkers                   int
 	profile                      bool
 	disableMetricsExport         bool
+	disableTracing               bool
 	otel                         string
 	otelCollector                string
 	transportCreds               string
@@ -95,6 +96,7 @@ func main() {
 	// deprecated
 	flag.BoolVar(&disableMetricsExport, "disable-metrics", false, "Set this flag to 'true', to enable exposing the metrics. Deprecated and will be removed in 1.6.0. ")
 	flag.BoolVar(&disableMetricsExport, "disableMetrics", false, "Set this flag to 'true', to enable exposing the metrics.")
+	flag.BoolVar(&disableTracing, "disableTracing", false, "Set this flag to 'true', to enable exposing traces.")
 	flag.StringVar(&otel, "otelConfig", "grpc", "Set this flag to 'prometheus', to enable exposing metrics directly to prometheus. Or else set to grpc to export metrics to an Opentelemetry collector")
 	flag.StringVar(&otelCollector, "otelCollector", "opentelemetrycollector.kyverno.svc.cluster.local:4317", "Set this flag to the OpenTelemetry Collector Receiver endpoint")
 	flag.StringVar(&transportCreds, "transportCreds", "", "Set this flag to the CA certificate to be be used by our Opentelemetry Metrics Client. If empty string is set, means an insecure connection will be used")
@@ -315,11 +317,14 @@ func main() {
 	}
 
 	// Tracing Configuration
-	err = tracing.NewTraceConfig(otelCollector, transportCreds, log.Log.WithName("OpentelemetryTracing"))
-	if err != nil {
-		setupLog.Error(err, "failed to enable tracing for Kyverno")
-		os.Exit(1)
+	if !disableTracing {
+		err = tracing.NewTraceConfig(otelCollector, transportCreds, log.Log.WithName("OpentelemetryTracing"))
+		if err != nil {
+			setupLog.Error(err, "failed to enable tracing for Kyverno")
+			os.Exit(1)
+		}
 	}
+
 	// POLICY CONTROLLER
 	// - reconciliation policy and policy violation
 	// - process policy on existing resources
