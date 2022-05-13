@@ -5,12 +5,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/kyverno/kyverno/pkg/config"
-	"github.com/robfig/cron/v3"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -29,16 +27,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 const (
 	meterName = "kyverno"
-)
-
-// TODO: Clear map memory after certain intervals
-var (
-	ruleInfo = make(map[[8]string]float64)
 )
 
 type MetricsConfig struct {
@@ -52,7 +44,6 @@ type MetricsConfig struct {
 
 	// config
 	Config *config.MetricsConfigData
-	cron   *cron.Cron
 	Log    logr.Logger
 }
 
@@ -97,56 +88,22 @@ func initializeMetrics(m *MetricsConfig) (*MetricsConfig, error) {
 		return nil, err
 	}
 
-	err = meter.RegisterCallback([]instrument.Asynchronous{m.policyRuleInfoMetric},
-		func(ctx context.Context) {
-			lock := sync.RWMutex{}
-			lock.RLock()
-			defer lock.RUnlock()
-
-			for k, v := range ruleInfo {
-				commonLabels := []attribute.KeyValue{
-					attribute.String("policy_validation_mode", k[0]),
-					attribute.String("policy_type", k[1]),
-					attribute.String("policy_background_mode", k[2]),
-					attribute.String("policy_namespace", k[3]),
-					attribute.String("policy_name", k[4]),
-					attribute.String("rule_name", k[5]),
-					attribute.String("rule_type", k[6]),
-					attribute.String("status", k[7]),
-				}
-				m.policyRuleInfoMetric.Observe(ctx, v, commonLabels...)
-			}
-		})
-
-	if err != nil {
-		m.Log.Error(err, "failed to register callback")
-		return nil, err
-	}
-
 	return m, nil
 }
 
-func NewOTLPGRPCConfig(endpoint string, metricsConfigData *config.MetricsConfigData, certs string, log logr.Logger) (*MetricsConfig, error) {
-	ctx := context.Background()
+func NewOTLPGRPCConfig(endpoint string,
+	metricsConfigData *config.MetricsConfigData,
+	certs string,
+	kubeClient kubernetes.Interface,
+	log logr.Logger,
+) (*MetricsConfig, error) {
 
+	ctx := context.Background()
 	var client otlpmetric.Client
 
 	if certs != "" {
-		// creates the in-cluster config
-		config, err := rest.InClusterConfig()
-		if err != nil {
-			log.Error(err, "Error fetching in cluster config")
-			return nil, err
-		}
-		// creates the clientset
-		clientset, err := kubernetes.NewForConfig(config)
-		if err != nil {
-			log.Error(err, "Error creating clientset")
-			return nil, err
-		}
-
 		// here the certificates are stored as configmaps
-		configmap, err := clientset.CoreV1().ConfigMaps("kyverno").Get(ctx, certs, v1.GetOptions{})
+		configmap, err := kubeClient.CoreV1().ConfigMaps("kyverno").Get(ctx, certs, v1.GetOptions{})
 		if err != nil {
 			log.Error(err, "Error fetching certificate from configmap")
 		}
@@ -196,12 +153,10 @@ func NewOTLPGRPCConfig(endpoint string, metricsConfigData *config.MetricsConfigD
 		controller.WithCollectPeriod(2*time.Second),
 	)
 	global.SetMeterProvider(pusher)
-	// meterProvider = pusher
 
 	m := new(MetricsConfig)
 	m.Log = log
 	m.Config = metricsConfigData
-	m.cron = cron.New()
 
 	m, err = initializeMetrics(m)
 
@@ -215,33 +170,14 @@ func NewOTLPGRPCConfig(endpoint string, metricsConfigData *config.MetricsConfigD
 		return nil, err
 	}
 
-	// configuring metrics periodic refresh
-	if m.Config.GetMetricsRefreshInterval() != 0 {
-		if len(m.cron.Entries()) > 0 {
-			m.Log.Info("Skipping the configuration of metrics refresh. Already found cron expiration to be set.")
-		} else {
-			_, err := m.cron.AddFunc(fmt.Sprintf("@every %s", m.Config.GetMetricsRefreshInterval()), func() {
-				m.Log.Info("Resetting the metrics as per their periodic refresh")
-				// reset metrics here - clear map values
-				for k := range ruleInfo {
-					delete(ruleInfo, k)
-				}
-			})
-			if err != nil {
-				return nil, err
-			}
-			log.Info(fmt.Sprintf("Configuring metrics refresh at a periodic rate of %s", m.Config.GetMetricsRefreshInterval()))
-			m.cron.Start()
-		}
-	} else {
-		m.Log.Info("Skipping the configuration of metrics refresh as 'metricsRefreshInterval' wasn't specified in values.yaml at the time of installing kyverno")
-	}
 	return m, nil
 }
 
-func NewPrometheusConfig(metricsConfigData *config.MetricsConfigData, log logr.Logger) (*MetricsConfig, *http.ServeMux, error) {
-	config := prometheus.Config{}
+func NewPrometheusConfig(metricsConfigData *config.MetricsConfigData,
+	log logr.Logger,
+) (*MetricsConfig, *http.ServeMux, error) {
 
+	config := prometheus.Config{}
 	res, err := resource.New(context.Background(),
 		resource.WithAttributes(semconv.ServiceNameKey.String("kyverno-svc-metrics")),
 		resource.WithAttributes(semconv.ServiceNamespaceKey.String("kyverno")),
@@ -268,10 +204,12 @@ func NewPrometheusConfig(metricsConfigData *config.MetricsConfigData, log logr.L
 
 	global.SetMeterProvider(exporter.MeterProvider())
 
+	// Create new config object and attach metricsConfig to it
 	m := new(MetricsConfig)
-	m.Log = log
 	m.Config = metricsConfigData
-	m.cron = cron.New()
+
+	// Initialize metrics logger
+	m.Log = log
 
 	m, err = initializeMetrics(m)
 
@@ -281,28 +219,6 @@ func NewPrometheusConfig(metricsConfigData *config.MetricsConfigData, log logr.L
 
 	metricsServerMux := http.NewServeMux()
 	metricsServerMux.HandleFunc("/metrics", exporter.ServeHTTP)
-
-	// configuring metrics periodic refresh
-	if m.Config.GetMetricsRefreshInterval() != 0 {
-		if len(m.cron.Entries()) > 0 {
-			m.Log.Info("Skipping the configuration of metrics refresh. Already found cron expiration to be set.")
-		} else {
-			_, err := m.cron.AddFunc(fmt.Sprintf("@every %s", m.Config.GetMetricsRefreshInterval()), func() {
-				m.Log.Info("Resetting the metrics as per their periodic refresh")
-				// reset metrics here - clear map values
-				for k := range ruleInfo {
-					delete(ruleInfo, k)
-				}
-			})
-			if err != nil {
-				return nil, nil, err
-			}
-			log.Info(fmt.Sprintf("Configuring metrics refresh at a periodic rate of %s", m.Config.GetMetricsRefreshInterval()))
-			m.cron.Start()
-		}
-	} else {
-		m.Log.Info("Skipping the configuration of metrics refresh as 'metricsRefreshInterval' wasn't specified in values.yaml at the time of installing kyverno")
-	}
 
 	return m, metricsServerMux, nil
 }
@@ -348,13 +264,19 @@ func (m *MetricsConfig) RecordPolicyChanges(policyValidationMode PolicyValidatio
 func (m *MetricsConfig) RecordPolicyRuleInfo(policyValidationMode PolicyValidationMode, policyType PolicyType, policyBackgroundMode PolicyBackgroundMode, policyNamespace string, policyName string,
 	ruleName string, ruleType RuleType, status string, metricValue float64, log logr.Logger) {
 
-	// TODO: store the metric labels and value in a map, delete after 24 hrs, register callback to observe these metrics
-	lock := sync.RWMutex{}
-	lock.Lock()
-	defer lock.Unlock()
+	ctx := context.Background()
+	commonLabels := []attribute.KeyValue{
+		attribute.String("policy_validation_mode", string(policyValidationMode)),
+		attribute.String("policy_type", string(policyType)),
+		attribute.String("policy_background_mode", string(policyBackgroundMode)),
+		attribute.String("policy_namespace", policyNamespace),
+		attribute.String("policy_name", policyName),
+		attribute.String("rule_name", ruleName),
+		attribute.String("rule_type", string(ruleType)),
+		attribute.String("status", status),
+	}
 
-	var labels = [8]string{string(policyValidationMode), string(policyType), string(policyBackgroundMode), policyNamespace, policyName, ruleName, string(ruleType), status}
-	ruleInfo[labels] = metricValue
+	m.policyRuleInfoMetric.Observe(ctx, metricValue, commonLabels...)
 }
 
 func (m MetricsConfig) RecordAdmissionRequests(resourceKind string, resourceNamespace string, resourceRequestOperation ResourceRequestOperation, log logr.Logger) {

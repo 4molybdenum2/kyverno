@@ -237,7 +237,7 @@ func FetchAttestations(imageRef string, imageVerify *v1.ImageVerification, log l
 	var signatures []oci.Signature
 	var bundleVerified bool
 
-	tracing.DoInSpan(ctx, "cosign", "verify_image_signatures", func(ctx context.Context) {
+	tracing.DoInSpan(ctx, "cosign_operations", "verify_image_signatures", func(ctx context.Context) {
 		signatures, bundleVerified, err = client.VerifyImageAttestations(context.Background(), ref, cosignOpts)
 	})
 
